@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="https://d3js.org/d3.v4.js"></script>
+    <ul>
+        <li><a href="{{ url_for('pca') }}">Scree Plot</a></li>
+        <li><a href="{{ url_for('biplot') }}">Biplot</a></li>
+      </ul>
+    
+      <div class="dropdown">
+        <select id="dropdown1">
+          <option value="screeplot">Scree Plot</option>
+          <option value="scatterplot">Scatterplot</option>
+        </select>
+        <button onclick="scatterOrScree();">Submit</button>
+        </div>
+
+
+    <div id="my_dataviz"></div>
+    <div id="chart"></div>
+    <div id="myTable"></div>
+
+    <style>
+                table {
+        border-collapse: collapse;
+        border: 2px solid #ddd;
+        font-size: 14px;
+        color: #333;
+        margin: 20px;
+        background-color: #f9f9f9;
+        }
+
+        th, td {
+        padding: 8px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+        }
+
+        th {
+        background-color: #4CAF50;
+        color: white;
+        }
+
+        ul {
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #333;
+}
+
+li {
+  float: left;
+}
+
+li a {
+  display: block;
+  color: white;
+  text-align: center;
+  padding: 14px 16px;
+  text-decoration: none;
+}
+
+li a:hover:not(.active) {
+  background-color: #111;
+}
+
+.dropdown {
+      position: absolute;
+      top: 30px;
+      left: 44%;
+      transform: translate(-50%, 0);
+      text-align: center;
+
+    }
+
+    </style>
+
+</head>
+<body>
+
+    <style>
+
+        div.tooltip {
+     position: absolute;
+     text-align: center;
+     padding: .2rem;
+     background: #313639;
+     color: #f9f9f9;
+     border: 0px;
+     border-radius: 8px;
+     pointer-events: none;
+     font-size: .7rem;
+}
+    </style>
+
+    <script>
+        var top_attributes = [];
+
+        function scatterOrScree() {
+
+
+        var e1 = document.getElementById("dropdown1");
+        var value1 = e1.value; 
+
+        console.log("value=",value1)
+    // ########################### MAIN SCRIPT TAG ####################################
+
+    let pca_data = JSON.parse('{{ data | tojson }}');
+    let loadings = JSON.parse('{{data.loadings | tojson}}');
+    let eigen_values = JSON.parse('{{data.eigen_values|tojson}}');
+    let attributes = JSON.parse('{{data.attributes|tojson}}');
+    let data_list = pca_data.data_list;
+
+    if(value1 == 'screeplot') {
+
+    var div = d3.select("body").append("div")
+     .attr("class", "tooltip")
+     .style("opacity", 0);
+
+        
+        // console.log("loadings",loadings[0]);
+        console.log('pca_data', pca_data)
+        values = pca_data.pc_values;
+        variance = pca_data.variance;
+
+        var margin = {top: 40, right: 30, bottom: 70, left: 60},
+          width = 800 - margin.left - margin.right,
+          height = 500 - margin.top - margin.bottom;
+
+        d3.selectAll("svg").remove();
+
+          // appending svg
+        var svg = d3.select("#my_dataviz")
+        .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+            .attr("transform",
+                "translate(" + margin.left + "," + margin.top + ")");
+
+        var x = d3.scaleLinear()
+        .domain([0, d3.max(pca_data.pc_values)])  // defining the domains
+        .range([ 0, width ]);
+
+        svg.append("g")
+            .attr("transform", "translate(0," + height + ")")
+            .call(d3.axisBottom(x))
+            .selectAll("text")
+            .style("text-anchor", "end")
+            .attr("font", "3px")
+            .attr("dx", "-.8em")
+            .attr("dy", ".15em")
+            .attr("transform", "rotate(-60)");
+
+        var y = d3.scaleLinear()
+            .domain([0, d3.max(pca_data.variance)])  // defining the domains
+            .range([ height, 0]);
+        svg.append("g")
+            .call(d3.axisLeft(y));
+            
+
+        svg.append('g')
+            .selectAll("dot")
+            .data(pca_data.pc_values)
+            .enter()
+            .append("circle")
+            .on("click", function(d, i) { data = {'x': d, 'y':pca_data.variance[i]}; generateLoadings(loadings,i); }) // on mouse CLICK
+            .on("mouseover", function(d){   // on hovering the mouse
+                d3.select(this).transition()
+                .duration('100')
+                .attr("r", 8);
+
+                div.transition()
+                .duration(100)
+                .style("opacity", 1);
+             })
+
+             .on("mouseout", function(d) {  // when the mouse leaves
+                d3.select(this).transition()
+                    .duration("200")
+                    .attr("r", 5);
+
+                    div.transition()
+                        .duration('200')
+                        .style("opacity", 0);
+
+                        div.html(d3.format(".2f")(d))
+                            .style("left", (d3.event.pageX + 10) + "px")
+                            .style("top", (d3.event.pageY - 15) + "px");
+             })
+            .attr("cx", d=>x(d))
+            .attr("cy", (d,i) => y(pca_data.variance[i]))
+            .attr("r", 5)
+            .style("fill", "#ff0000")
+
+
+            svg.append('g')
+                .append('path')
+                .datum(pca_data.pc_values)
+                .attr('d', d3.line()
+                            .x((d) => x(d))
+                            .y((d, i) => y(pca_data.variance[i]))
+                            .curve(d3.curveLinear))
+                .attr('stroke', '#000')
+                .attr('stroke-width', 1)
+                .attr('fill', 'none');
+
+
+            svg.append("text")             
+                .attr("transform",
+                    "translate(" + (width/2) + " ," + 
+                                    (height + margin.top + 20) + ")")
+                .style("text-anchor", "middle")
+                .text("Number of Principal Components");
+
+            // Y axis label
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left)
+                .attr("x",0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .text("Explained Variance ratio (%) ");
+
+            // title
+            svg.append("text")
+                .attr("x", (width / 2))     
+                .attr("y", 0 - (margin.top / 2))
+                .attr("text-anchor", "middle")  
+                .style("font-size", "18px") 
+                .text("Scree plot");
+
+
+                // ############# Generating table function ################ 
+
+            function generateLoadings(data, intrinsic_dim) {
+
+            let counter_example = 1;
+
+            // Slicing 
+            let n = intrinsic_dim+1;
+            let index_ctr = 0;
+
+            const result = [];
+            for (let i = 0; i < data.length; i++) {
+                const values = Object.values(data[i]).slice(0, n);
+                result.push(values);
+            }
+
+            for (let key in result) {
+                let entry = result[key];
+                let sum_squared = 0;
+                for (let prop in entry) {
+                    sum_squared += entry[prop] ** 2;
+                }
+                entry.sum_squared = sum_squared;
+                entry.index = index_ctr;
+
+                index_ctr+=1
+                entry.attribute = attributes[index_ctr];
+                }
+
+            result.sort((a, b) => b.sum_squared - a.sum_squared);
+
+
+            d3.select("table").remove();
+
+            var tableData = result.slice(0, 4); // Take top 4 rows
+            console.log('tableData', tableData)
+            var columns = Object.keys(tableData[0]); // Get column names dynamically
+
+
+            // Create table element and header row
+            var table = d3.select("#myTable").append("table");
+            var header = table.append("thead").append("tr")
+            .selectAll("th")
+            .data(columns)
+            .enter()
+            .append("th")
+            .text(function(d) { return d; });
+
+            // Create table rows
+            var rows = table.append("tbody")
+            .selectAll("tr")
+            .data(tableData)
+            .enter()
+            .append("tr");
+
+            // Create cells for each row
+            var cells = rows.selectAll("td")
+            .data(function(row) {
+            return columns.map(function(column) {
+                return { column: column, value: row[column] };
+            });
+            })
+            .enter()
+            .append("td")
+            .text(function(d) { return d.value; });
+
+            top_attributes = tableData.map(function(d) { return d.attribute; });
+            console.log(top_attributes);
+
+}
+
+
+    }  // end of if 
+
+    else if(value1 == 'scatterplot') {
+
+        console.log("----------Inside scatterplot code---------");
+
+        console.log("top 4 attributes:",top_attributes);
+
+        d3.selectAll("svg").remove();
+        d3.selectAll("#myTable").remove();
+
+        console.log("top attributes:",top_attributes)
+
+        let padding = 0;
+
+    // FORMATTING
+
+    let transformed_data = {};
+
+data_list.forEach((data_dict) => {
+  for (const [key, value] of Object.entries(data_dict)) {
+    if (!(key in transformed_data)) {
+      transformed_data[key] = [];
+    }
+    transformed_data[key].push(value);
+  }
+});
+
+console.log(transformed_data);
+
+    // END
+data_list = transformed_data
+
+console.log("datalist:",data_list);
+
+// Dimension of the whole chart. Only one size since it has to be square
+var marginWhole = {top: 10, right: 10, bottom: 10, left: 10},
+    sizeWhole = 800 - marginWhole.left - marginWhole.right
+
+// Create the svg area
+var svg = d3.select("#my_dataviz")
+  .append("svg")
+    .attr("width", sizeWhole  + marginWhole.left + marginWhole.right)
+    .attr("height", sizeWhole  + marginWhole.top + marginWhole.bottom)
+  .append("g")
+    .attr("transform", "translate(" + marginWhole.left + "," + marginWhole.top + ")");
+
+  // What are the numeric variables in this dataset? How many do I have
+  var allVar = top_attributes
+  var numVar = allVar.length
+
+  // Now I can compute the size of a single chart
+  mar = 20
+  size = sizeWhole / numVar
+
+
+  var position = d3.scalePoint()
+    .domain(allVar)
+    .range([0, sizeWhole-size])
+
+  // Color scale: give me a specie name, I return a color
+  var color = d3.scaleOrdinal()
+    .domain(["zero", "one"])
+    .range(["#f5b7b3", "#04677d"])
+
+
+  console.log('==> data', data_list, var1, var2, allVar);
+
+  let dataObj = []
+  let n = data_list[allVar[0]].length
+
+  for (let i = 0; i < n; i ++) {
+    let localObj = {}
+    for (key of allVar){
+        localObj[key] = data_list[key][i]
+    }
+    localObj['diagnosis'] = ""+data_list['diagnosis'][i] == "0" ? "zero" : "one"
+    dataObj.push(localObj)
+  }
+
+  console.log('==> dataObj', dataObj)
+  
+
+  for (i in allVar){
+    for (j in allVar){
+      
+      // Get current variable name
+      var var1 = allVar[i]
+      var var2 = allVar[j]
+    
+      console.log(var1, var2);
+      // If var1 == var2 i'm on the diagonal, I skip that
+      if (var1 === var2) { continue; }
+
+      // Add X Scale of each graph
+      xextent = d3.extent(dataObj, function(d) { return +d[var1] })
+      var x = d3.scaleLinear()
+        .domain(xextent).nice()
+        .range([ 0, size-2*mar ]);
+
+      // Add Y Scale of each graph
+      yextent = d3.extent(dataObj, function(d) { return +d[var2] })
+      var y = d3.scaleLinear()
+        .domain(yextent).nice()
+        .range([ size-2*mar, 0 ]);
+
+      // Add a 'g' at the right position
+      var tmp = svg
+        .append('g')
+        .attr("transform", "translate(" + (position(var1)+mar) + "," + (position(var2)+mar) + ")");
+
+      // Add X and Y axis in tmp
+      tmp.append("g")
+        .attr("transform", "translate(" + 0 + "," + (size-mar*2) + ")")
+        .call(d3.axisBottom(x).ticks(3));
+      tmp.append("g")
+        .call(d3.axisLeft(y).ticks(3));
+    
+    
+      
+      // Add circle
+      tmp
+        .selectAll("myCircles")
+        .data(dataObj)
+        .enter()
+        .append("circle")
+          .attr("cx", function(d){ return x(+d[var1]) })
+          .attr("cy", function(d){ return y(+d[var2]) })
+          .attr("r", 3)
+          .style("fill", function(d){ console.log('silly error', d['diagnosis']); return color(d['diagnosis'])})
+    }
+  }
+
+
+  // ------------------------------- //
+  // Add variable names = diagonal
+  // ------------------------------- //
+  for (i in allVar){
+    for (j in allVar){
+      if (i != j) { continue; }
+      // Add text
+      var var1 = allVar[i]
+      var var2 = allVar[j]
+      svg
+        .append('g')
+        .attr("transform", "translate(" + position(var1) + "," + position(var2) + ")")
+        .append('text')
+          .attr("x", size/2)
+          .attr("y", size/2)
+          .text(var1)
+          .attr("text-anchor", "middle")
+
+    }
+  }
+
+
+    }
+}
+
+
+    </script>
+
+</body>
+</html>
